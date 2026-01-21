@@ -5,8 +5,12 @@
   "description": "Bridge Gemini Web to Local Server",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "nativeMessaging"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "https://gemini.google.com/*",
     "http://localhost:3000/*"

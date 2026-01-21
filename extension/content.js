@@ -99,9 +99,26 @@ function createStatusDot() {
     });
 
     popover.innerHTML = `
-        <div style="margin-bottom: 8px; font-weight: bold; color: #fff; border-bottom: 1px solid #333; padding-bottom: 4px;">GEMINI BRIDGE</div>
+        <div style="margin-bottom: 8px; font-weight: bold; color: #fff; border-bottom: 1px solid #333; padding-bottom: 4px; display: flex; justify-content: space-between;">
+            <span>GEMINI BRIDGE</span>
+            <span style="font-size: 10px; opacity: 0.7; cursor: pointer;" id="gb-toggle-help">❓ Help</span>
+        </div>
+        
         <div style="margin-bottom: 8px;">Status: <span id="gb-status">Initializing...</span></div>
-        <div style="margin-bottom: 4px; color: #aaa;">Example cURL:</div>
+        
+        <button id="gb-start-server" style="width:100%; margin-bottom: 8px; padding: 6px; background: #2979ff; border: none; border-radius: 4px; color: white; cursor: pointer; font-weight: bold;">▶ Start/Restart Server</button>
+        
+        <!-- Setup Guide (Hidden by default) -->
+        <div id="gb-help-section" style="display:none; background: #333; padding: 8px; margin-bottom: 8px; border-radius: 4px; font-size: 11px; line-height: 1.4;">
+            <strong style="color: #ff9100;">First Time Setup:</strong><br>
+            1. Download the "launcher" folder.<br>
+            2. Run <code>install.bat</code>.<br>
+            3. Paste Extension ID: <br>
+            <code style="background:black; padding:2px; display:block; margin:2px 0;">${chrome.runtime.id}</code>
+            4. Reload extension & Refresh page.
+        </div>
+
+        <div style="margin-bottom: 4px; color: #aaa;">PRONTI ALL'USO (cURL):</div>
         <textarea id="gb-curl" readonly style="width: 100%; height: 80px; background: #2d2d2d; border: 1px solid #444; color: #4caf50; font-family: monospace; font-size: 11px; padding: 5px; box-sizing: border-box; resize: none;"></textarea>
     `;
     
@@ -111,10 +128,44 @@ function createStatusDot() {
         popover.style.display = isVisible ? 'none' : 'block';
         
         if (!isVisible) {
+            // Bind Help Toggle
+            const helpBtn = document.getElementById('gb-toggle-help');
+            const helpSec = document.getElementById('gb-help-section');
+            if(helpBtn) helpBtn.onclick = (e) => {
+                e.stopPropagation();
+                helpSec.style.display = helpSec.style.display === 'none' ? 'block' : 'none';
+            };
+
+            // Update cURL when opening
             // Update cURL when opening
             const url = window.geminiBridgeTunnelUrl || 'http://localhost:3000';
             const textarea = document.getElementById('gb-curl');
             textarea.value = `curl -X POST ${url}/api/ask \\\n-H "Content-Type: application/json" \\\n-d "{\\"prompt\\": \\"Ciao Gemini!\\"}"`;
+            
+            // Re-bind click event every time or just once? Ideally once but innerHTML destroys listeners.
+            // Better to add listener after innerHTML set inside this scope or use global click delegation.
+            // Simplified: Add listener here.
+            setTimeout(() => {
+                const btn = document.getElementById('gb-start-server');
+                if(btn) btn.onclick = () => {
+                    try {
+                        chrome.runtime.sendMessage({ action: 'launch_server' }, (response) => {
+                             if (chrome.runtime.lastError) {
+                                 alert('Error: ' + chrome.runtime.lastError.message + '\n\nDid you reload the extension?');
+                                 return;
+                             }
+                             if (!response) {
+                                 alert('Error: No response from extension.\nPlease reload the extension in chrome://extensions');
+                                 return;
+                             }
+                             if(response && response.error) alert('Error: ' + response.error);
+                             else alert('Server launch command sent!');
+                        });
+                    } catch (e) {
+                         alert('Connection Error: ' + e.message + '\nPlease reload the page and extension.');
+                    }
+                };
+            }, 50);
         }
     });
 
