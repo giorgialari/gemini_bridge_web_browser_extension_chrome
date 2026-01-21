@@ -47,7 +47,7 @@ function createStatusDot() {
     
     // 1. The Dot (Now Logo)
     const dot = document.createElement('div');
-    const logoUrl = chrome.runtime.getURL('icon.png');
+    const logoUrl = chrome.runtime.getURL('gemini_icon.png');
     
     Object.assign(dot.style, {
         position: 'fixed',
