@@ -1,0 +1,4 @@
+2026-01-21T10:58:49.346Z - Native Host started
+2026-01-21T10:58:49.354Z - Received: {"action":"start_server"}
+2026-01-21T10:58:49.355Z - Starting server...
+2026-01-21T10:58:49.368Z - Server process spawned
