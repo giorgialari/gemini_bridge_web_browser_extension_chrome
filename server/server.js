@@ -19,9 +19,15 @@ app.use(cors());
 // Store the socket connection
 let activeSocket = null;
 
+// Store the tunnel URL
+let publicTunnelUrl = 'http://localhost:3000';
+
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     activeSocket = socket;
+    
+    // Send current tunnel URL to the new client
+    socket.emit('tunnel-url', { url: publicTunnelUrl });
 
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
@@ -86,6 +92,8 @@ server.listen(PORT, async () => {
     try {
         const localtunnel = require('localtunnel');
         const tunnel = await localtunnel({ port: PORT });
+        publicTunnelUrl = tunnel.url; // Store for clients
+        
         console.log(`\n--------------------------------------------------`);
         console.log(`PUBLIC TUNNEL URL: ${tunnel.url}`);
         console.log(`Use this URL to call the API from anywhere!`);

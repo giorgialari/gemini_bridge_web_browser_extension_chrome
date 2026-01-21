@@ -7,74 +7,121 @@ initializeSocket();
 function initializeSocket() {
     console.log('Gemini Bridge: Connecting to server...');
     
-    // Inject Status Badge
-    const updateBadge = createStatusBadge();
+    // Inject Status Dot
+    const updateDot = createStatusDot();
 
     // Connect to localhost directly
     const socket = io('http://localhost:3000');
     
     socket.on('connect', () => {
         console.log('Gemini Bridge: Connected to ' + socket.id);
-        updateBadge('Connected', 'green');
+        updateDot('Connected', 'green');
     });
 
     socket.on('disconnect', () => {
         console.log('Gemini Bridge: Disconnected');
-        updateBadge('Disconnected', 'red');
+        updateDot('Disconnected', 'red');
     });
 
     socket.on('connect_error', (err) => {
         console.error('Gemini Bridge: Connection error:', err);
-        updateBadge('Error', 'orange');
+        updateDot('Error', 'orange');
+    });
+
+    socket.on('tunnel-url', (data) => {
+        console.log('Gemini Bridge: Tunnel URL received:', data.url);
+        window.geminiBridgeTunnelUrl = data.url;
     });
 
     socket.on('execute-prompt', async (data) => {
         console.log('Gemini Bridge: Received prompt:', data.prompt);
-        updateBadge('Working...', 'blue');
+        updateDot('Working...', 'blue');
         await runGemini(data.prompt, socket);
-        updateBadge('Connected', 'green');
+        updateDot('Connected', 'green');
     });
 }
 
-function createStatusBadge() {
-    const badge = document.createElement('div');
-    badge.id = 'gemini-bridge-badge';
-    Object.assign(badge.style, {
+function createStatusDot() {
+    const container = document.createElement('div');
+    container.id = 'gemini-bridge-ui';
+    
+    // 1. The Dot
+    const dot = document.createElement('div');
+    Object.assign(dot.style, {
         position: 'fixed',
         bottom: '20px',
         right: '20px',
-        padding: '10px 15px',
-        backgroundColor: '#333',
-        color: '#fff',
-        borderRadius: '20px',
-        fontFamily: 'sans-serif',
-        fontSize: '14px',
-        fontWeight: 'bold',
+        width: '12px',
+        height: '12px',
+        backgroundColor: '#c62828', // Default red
+        borderRadius: '50%',
         zIndex: '99999',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-        transition: 'all 0.3s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        cursor: 'pointer',
+        border: '2px solid white',
+        transition: 'background-color 0.3s'
+    });
+    dot.title = "Gemini Bridge: Disconnected";
+
+    // 2. The Popover (Menu)
+    const popover = document.createElement('div');
+    Object.assign(popover.style, {
+        position: 'fixed',
+        bottom: '40px',
+        right: '20px',
+        width: '300px',
+        backgroundColor: '#1e1e1e',
+        color: '#e0e0e0',
+        padding: '15px',
+        borderRadius: '8px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        zIndex: '99998',
+        display: 'none', // Hidden by default
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        border: '1px solid #333'
     });
 
-    const docIcon = document.createElement('span');
-    docIcon.innerText = '🔌 ';
-    badge.appendChild(docIcon);
+    popover.innerHTML = `
+        <div style="margin-bottom: 8px; font-weight: bold; color: #fff; border-bottom: 1px solid #333; padding-bottom: 4px;">GEMINI BRIDGE</div>
+        <div style="margin-bottom: 8px;">Status: <span id="gb-status">Initializing...</span></div>
+        <div style="margin-bottom: 4px; color: #aaa;">Example cURL:</div>
+        <textarea id="gb-curl" readonly style="width: 100%; height: 80px; background: #2d2d2d; border: 1px solid #444; color: #4caf50; font-family: monospace; font-size: 11px; padding: 5px; box-sizing: border-box; resize: none;"></textarea>
+    `;
+    
+    // Toggle popover on dot click
+    dot.addEventListener('click', () => {
+        const isVisible = popover.style.display === 'block';
+        popover.style.display = isVisible ? 'none' : 'block';
+        
+        if (!isVisible) {
+            // Update cURL when opening
+            const url = window.geminiBridgeTunnelUrl || 'http://localhost:3000';
+            const textarea = document.getElementById('gb-curl');
+            textarea.value = `curl -X POST ${url}/api/ask \\\n-H "Content-Type: application/json" \\\n-d "{\\"prompt\\": \\"Ciao Gemini!\\"}"`;
+        }
+    });
 
-    const textSpan = document.createElement('span');
-    textSpan.innerText = 'Bridge: Init...';
-    badge.appendChild(textSpan);
+    container.appendChild(popover);
+    container.appendChild(dot);
+    document.body.appendChild(container);
 
-    document.body.appendChild(badge);
+    // Close popover if clicking outside
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            popover.style.display = 'none';
+        }
+    });
 
     return (status, colorName) => {
-        textSpan.innerText = `Bridge: ${status}`;
-        if (colorName === 'green') badge.style.backgroundColor = '#2e7d32'; // Green 800
-        else if (colorName === 'red') badge.style.backgroundColor = '#c62828'; // Red 800
-        else if (colorName === 'blue') badge.style.backgroundColor = '#1565c0'; // Blue 800
-        else if (colorName === 'orange') badge.style.backgroundColor = '#ef6c00'; // Orange 800
-        else badge.style.backgroundColor = '#333';
+        dot.title = `Gemini Bridge: ${status}`;
+        const statusSpan = document.getElementById('gb-status');
+        if (statusSpan) statusSpan.innerText = status;
+
+        if (colorName === 'green') dot.style.backgroundColor = '#2e7d32'; 
+        else if (colorName === 'red') dot.style.backgroundColor = '#c62828'; 
+        else if (colorName === 'blue') dot.style.backgroundColor = '#1565c0'; 
+        else if (colorName === 'orange') dot.style.backgroundColor = '#ef6c00'; 
     };
 }
 
