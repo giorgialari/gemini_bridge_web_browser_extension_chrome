@@ -34,9 +34,10 @@
 - **Google Chrome** browser.
 
 ### 2. Setup Server
-Navigate to the server directory and install dependencies:
+Clone the repository:
 ```bash
-cd server
+git clone https://github.com/giorgialari/gemini_bridge_web_browser_extension_chrome.git
+cd gemini_bridge_web_browser_extension_chrome/server
 npm install
 ```
 

@@ -111,7 +111,7 @@ function createStatusDot() {
         <!-- Setup Guide (Hidden by default) -->
         <div id="gb-help-section" style="display:none; background: #333; padding: 8px; margin-bottom: 8px; border-radius: 4px; font-size: 11px; line-height: 1.4;">
             <strong style="color: #ff9100;">First Time Setup:</strong><br>
-            1. Download the "launcher" folder.<br>
+            1. Download the <a href="https://github.com/giorgialari/gemini_bridge_web_browser_extension_chrome" target="_blank" style="color: #4fc3f7; text-decoration: underline;">Project (Server + Launcher)</a> from GitHub.<br>
             2. Run <code>install.bat</code>.<br>
             3. Paste Extension ID: <br>
             <code style="background:black; padding:2px; display:block; margin:2px 0;">${chrome.runtime.id}</code>
