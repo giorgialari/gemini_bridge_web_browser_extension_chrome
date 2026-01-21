@@ -45,23 +45,39 @@ function createStatusDot() {
     const container = document.createElement('div');
     container.id = 'gemini-bridge-ui';
     
-    // 1. The Dot
+    // 1. The Dot (Now Logo)
     const dot = document.createElement('div');
+    const logoUrl = chrome.runtime.getURL('icon.png');
+    
     Object.assign(dot.style, {
         position: 'fixed',
         bottom: '20px',
         right: '20px',
-        width: '12px',
-        height: '12px',
-        backgroundColor: '#c62828', // Default red
+        width: '40px',
+        height: '40px',
+        backgroundImage: `url("${logoUrl}")`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
         borderRadius: '50%',
         zIndex: '99999',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.4)',
         cursor: 'pointer',
-        border: '2px solid white',
-        transition: 'background-color 0.3s'
+        border: '2px solid transparent',
+        transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
     });
     dot.title = "Gemini Bridge: Disconnected";
+
+    // Indicator ring (for exact status)
+    const ring = document.createElement('div');
+    Object.assign(ring.style, {
+        position: 'absolute',
+        top: '-2px', left: '-2px', right: '-2px', bottom: '-2px',
+        borderRadius: '50%',
+        border: '2px solid #c62828', // Default red
+        pointerEvents: 'none',
+        transition: 'border-color 0.3s'
+    });
+    dot.appendChild(ring);
 
     // 2. The Popover (Menu)
     const popover = document.createElement('div');
@@ -118,10 +134,20 @@ function createStatusDot() {
         const statusSpan = document.getElementById('gb-status');
         if (statusSpan) statusSpan.innerText = status;
 
-        if (colorName === 'green') dot.style.backgroundColor = '#2e7d32'; 
-        else if (colorName === 'red') dot.style.backgroundColor = '#c62828'; 
-        else if (colorName === 'blue') dot.style.backgroundColor = '#1565c0'; 
-        else if (colorName === 'orange') dot.style.backgroundColor = '#ef6c00'; 
+        let colorHex = '#333';
+        if (colorName === 'green') colorHex = '#00e676'; // Bright green
+        else if (colorName === 'red') colorHex = '#ff1744'; // Bright red
+        else if (colorName === 'blue') colorHex = '#2979ff'; // Bright blue
+        else if (colorName === 'orange') colorHex = '#ff9100'; // Bright orange
+
+        ring.style.borderColor = colorHex;
+        
+        // Pulse effect for working state
+        if (colorName === 'blue') {
+             dot.style.transform = 'scale(1.1)';
+        } else {
+             dot.style.transform = 'scale(1)';
+        }
     };
 }
 

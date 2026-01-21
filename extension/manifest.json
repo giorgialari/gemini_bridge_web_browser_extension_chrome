@@ -16,5 +16,17 @@
       "matches": ["https://gemini.google.com/*"],
       "js": ["socket.io.min.js", "content.js"]
     }
+  ],
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+       "resources": ["icon.png"],
+       "matches": ["https://gemini.google.com/*"]
+    }
   ]
 }
