@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Bridge",
+  "version": "1.0",
+  "description": "Bridge Gemini Web to Local Server",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "http://localhost:3000/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["socket.io.min.js", "content.js"]
+    }
+  ]
+}
