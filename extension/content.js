@@ -10,8 +10,14 @@ function initializeSocket() {
     // Inject Status Dot
     const updateDot = createStatusDot();
 
-    // Connect to localhost directly
-    const socket = io('http://localhost:3000');
+    // Connect to localhost (127.0.0.1 is often more reliable for avoiding DNS issues)
+    // We remove 'transports: ["websocket"]' because Chrome blocks ws:// from https:// pages (Mixed Content).
+    // Polling is safer, even if it sometimes gives sporadic errors.
+    const socket = io('http://127.0.0.1:3000', {
+        reconnectionAttempts: 20,
+        reconnectionDelay: 2000,
+        timeout: 20000 // Increase connection timeout
+    });
     
     socket.on('connect', () => {
         console.log('Gemini Bridge: Connected to ' + socket.id);
@@ -284,7 +290,7 @@ async function runGemini(text, socket) {
     console.log('Gemini Bridge: Waiting for text generation to finish...');
     let lastText = "";
     let stableCount = 0;
-    const maxWaitTime = 180; // 3 minutes max
+    const maxWaitTime = 300; // 5 minutes max
     
     for (let i = 0; i < maxWaitTime; i++) {
         await new Promise(r => setTimeout(r, 1000)); // Check every second

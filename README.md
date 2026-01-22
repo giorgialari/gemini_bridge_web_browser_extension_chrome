@@ -13,7 +13,8 @@
 ## ✨ Features
 
 - **🚀 REST API Endpoint**: Send prompts to `POST /api/ask` and get text responses back.
-- **🌐 Public Access**: Automatically creates a secure `localtunnel` URL, so you can call your local Gemini instance from anywhere (e.g., n8n, Zapier, mobile apps).
+- **🏠 Local & Docker Support**: Designed for stable, local network usage (works perfectly with n8n on Docker).
+- **⏱️ Long Timeouts**: Customized to handle long content generation (up to 5 minutes) without dropping connections.
 - **⚡ Real-time Communication**: Uses Socket.io for instant, low-latency communication between the server and the browser.
 - **🔌 Native Launcher**: Includes a Chrome Native Messaging host to automatically spawn the server when you open Chrome (Windows).
 
@@ -21,7 +22,7 @@
 
 ## 🛠 Architecture
 
-1. **The Server (`/server`)**: A lightweight Node.js Express server. It holds the state and creates the tunnel.
+1. **The Server (`/server`)**: A lightweight Node.js Express server. It holds the state and receives API requests.
 2. **The Extension (`/extension`)**: Injects a script into `gemini.google.com` to act as a puppet, executing your prompts and scraping the responses.
 3. **The Launcher (`/launcher`)**: (Optional) A native bridge that lets the extension manage the server process directly.
 
@@ -45,7 +46,7 @@ npm install
 1. Open Chrome and go to `chrome://extensions`.
 2. Enable **Developer Mode** (top right toggle).
 3. Click **Load unpacked**.
-4. Select the `extension` folder from this manufacturer.
+4. Select the `extension` folder from this repository.
 5. **Copy the Extension ID** (e.g., `abcdef...`) - you'll need it for the launcher!
 
 ### 4. Setup Launcher (Windows Only)
@@ -66,11 +67,25 @@ npm start
 ```
 
 ### Making a Request
-Once the server is running (you'll see a green `PUBLIC TUNNEL URL` in the console), you can send requests.
+Once the server is running, you can send requests using the appropriate URL for your setup.
+
+#### 1. n8n in Docker (Windows/Mac)
+Use this URL in your HTTP Request node:
+`http://host.docker.internal:3000/api/ask`
+
+#### 2. n8n in Docker (Linux)
+Use this URL:
+`http://172.17.0.1:3000/api/ask`
+
+#### 3. Local Scripts / n8n Desktop
+Use this URL:
+`http://localhost:3000/api/ask`
+
+---
 
 **Example using cURL:**
 ```bash
-curl -X POST https://your-tunnel-url.loca.lt/api/ask \
+curl -X POST http://localhost:3000/api/ask \
      -H "Content-Type: application/json" \
      -d '{"prompt": "Explain Quantum Physics in 5 words"}'
 ```

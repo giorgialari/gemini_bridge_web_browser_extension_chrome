@@ -8,8 +8,11 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    pingTimeout: 60000, // Wait 1 minute before assuming client is dead
+    pingInterval: 25000
 });
 
 // Middleware for parsing JSON bodies
@@ -19,19 +22,19 @@ app.use(cors());
 // Store the socket connection
 let activeSocket = null;
 
-// Store the tunnel URL
-let publicTunnelUrl = 'http://localhost:3000';
+
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     activeSocket = socket;
     
-    // Send current tunnel URL to the new client
-    socket.emit('tunnel-url', { url: publicTunnelUrl });
+    // Send confirmation
+    socket.emit('connection-success', { status: 'connected' });
 
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+        console.log(`Client disconnected: ${socket.id}. Reason: ${reason}`);
         if (activeSocket === socket) {
+            console.log('Active socket cleared.');
             activeSocket = null;
         }
     });
@@ -57,7 +60,7 @@ app.post('/api/ask', async (req, res) => {
             // Clean up listener to avoid memory leaks if timeout happens
             activeSocket.off('gemini-response', responseHandler);
             reject(new Error('Timeout waiting for Gemini response'));
-        }, 60000); // 60 seconds timeout
+        }, 300000); // 5 minutes timeout
 
         const responseHandler = (data) => {
             clearTimeout(timeout);
@@ -85,25 +88,23 @@ app.post('/api/ask', async (req, res) => {
 });
 
 const PORT = 3000;
+
+// Increase the HTTP server's socket timeout to 5 minutes to match the API logic
+server.setTimeout(300000);
+
 server.listen(PORT, async () => {
     console.log(`Server listening on port ${PORT}`);
     
-    // Attempt to start localtunnel
-    try {
-        const localtunnel = require('localtunnel');
-        const tunnel = await localtunnel({ port: PORT });
-        publicTunnelUrl = tunnel.url; // Store for clients
-        
-        console.log(`\n--------------------------------------------------`);
-        console.log(`PUBLIC TUNNEL URL: ${tunnel.url}`);
-        console.log(`Use this URL to call the API from anywhere!`);
-        console.log(`Example: POST ${tunnel.url}/api/ask`);
-        console.log(`--------------------------------------------------\n`);
-
-        tunnel.on('close', () => {
-            console.log('Tunnel closed');
-        });
-    } catch (err) {
-        console.error('Failed to start tunnel:', err.message);
-    }
+    // Log local access URLs
+    console.log(`\n--------------------------------------------------`);
+    console.log(`SERVER API IS READY!`);
+    console.log(`\nUse one of these URLs in n8n (HTTP Request):`);
+    console.log(`\n1. If n8n is in Docker (Windows/Mac):`);
+    console.log(`   http://host.docker.internal:${PORT}/api/ask`);
+    console.log(`\n2. If n8n is in Docker (Linux):`);
+    console.log(`   http://172.17.0.1:${PORT}/api/ask`);
+    console.log(`\n3. If n8n IS NOT in Docker (Local):`);
+    console.log(`   http://localhost:${PORT}/api/ask`);
+    console.log(`\n(Use standard timeout settings, e.g. 5 minutes)`);
+    console.log(`--------------------------------------------------\n`);
 });
