@@ -11,12 +11,10 @@ function initializeSocket() {
     const updateDot = createStatusDot();
 
     // Connect to localhost (127.0.0.1 is often more reliable for avoiding DNS issues)
-    // We remove 'transports: ["websocket"]' because Chrome blocks ws:// from https:// pages (Mixed Content).
-    // Polling is safer, even if it sometimes gives sporadic errors.
     const socket = io('http://127.0.0.1:3000', {
         reconnectionAttempts: 20,
         reconnectionDelay: 2000,
-        timeout: 20000 // Increase connection timeout
+        timeout: 20000 
     });
     
     socket.on('connect', () => {
@@ -143,14 +141,10 @@ function createStatusDot() {
             };
 
             // Update cURL when opening
-            // Update cURL when opening
             const url = window.geminiBridgeTunnelUrl || 'http://localhost:3000';
             const textarea = document.getElementById('gb-curl');
             textarea.value = `curl -X POST ${url}/api/ask \\\n-H "Content-Type: application/json" \\\n-d "{\\"prompt\\": \\"Ciao Gemini!\\"}"`;
             
-            // Re-bind click event every time or just once? Ideally once but innerHTML destroys listeners.
-            // Better to add listener after innerHTML set inside this scope or use global click delegation.
-            // Simplified: Add listener here.
             setTimeout(() => {
                 const btn = document.getElementById('gb-start-server');
                 if(btn) btn.onclick = () => {
@@ -209,6 +203,8 @@ function createStatusDot() {
 }
 
 async function runGemini(text, socket) {
+    console.log('Gemini Bridge: === START runGemini ===');
+    
     // 1. Find input
     const inputDiv = document.querySelector('div[contenteditable="true"]') || document.querySelector('div[role="textbox"]');
     if (!inputDiv) {
@@ -217,106 +213,254 @@ async function runGemini(text, socket) {
         return;
     }
 
-    // Identify standard response containers
-    // We look for common classes used by Gemini for message text
-    const getResponseElements = () => {
-        // .markdown is frequent for the formatted text
-        // .model-response-text is sometimes used
-        // fallback to any large text block in the chat area if needed
-        let els = document.querySelectorAll('.markdown');
-        if (els.length === 0) els = document.querySelectorAll('.model-response-text');
-        if (els.length === 0) els = document.querySelectorAll('.message-content');
-        return els;
-    };
+    // 2. Capture state BEFORE sending
+    const conversationArea = document.querySelector('main') || document.body;
+    const initialTextContent = conversationArea.innerText; // Store full text
+    
+    // Helper for finding messages
+    const getModelMessages = () => document.querySelectorAll('[data-message-author-role="model"], .model-response-text, .markdown');
+    
+    console.log('Gemini Bridge: Initial Text Length:', initialTextContent.length);
 
-    const initialCount = getResponseElements().length;
-    console.log(`Gemini Bridge: Initial response count: ${initialCount}`);
-
-    // 2. Clear and set text
+    // 3. Insert and Send
     inputDiv.focus();
     document.execCommand('selectAll', false, null);
     document.execCommand('insertText', false, text);
+    
+    // FORCE UI WAKEUP
     inputDiv.dispatchEvent(new Event('input', { bubbles: true }));
+    inputDiv.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
+    inputDiv.dispatchEvent(new KeyboardEvent('keyup',  { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
+    inputDiv.dispatchEvent(new Event('change', { bubbles: true }));
+    
+    await new Promise(r => setTimeout(r, 2000)); 
 
-    // Wait a bit for UI
-    await new Promise(r => setTimeout(r, 800));
+    // Robust Send Strategy
+    const getSendButton = () => {
+        // High specificity first
+        return document.querySelector('button[aria-label="Invia"]') || 
+               document.querySelector('button[aria-label="Send"]') ||
+               document.querySelector('button[aria-label="Submit"]') ||
+               // Icon based
+               Array.from(document.querySelectorAll('button')).find(b => {
+                   if (b.disabled) return false;
+                   const svg = b.querySelector('svg');
+                   const hasSendIcon = b.innerHTML.includes('send') || (svg && b.clientHeight > 30);
+                   return hasSendIcon;
+               });
+    };
 
-    // 3. Find and click Send
-    let sendButton = document.querySelector('button[aria-label*="Send"]');
-    if (!sendButton) sendButton = document.querySelector('button[aria-label*="Invia"]');
-    if (!sendButton) {
-        const buttons = Array.from(document.querySelectorAll('button'));
-        sendButton = buttons.find(b => !b.disabled && b.querySelector('svg') && b.clientHeight > 20); 
-    }
+    let sendButton = getSendButton();
+
+    // Helper for complex clicking
+    const simulateClick = (element) => {
+        const opts = { bubbles: true, cancelable: true, view: window };
+        element.dispatchEvent(new MouseEvent('mousedown', opts));
+        element.dispatchEvent(new MouseEvent('mouseup', opts));
+        element.click();
+    };
+    
+    let sent = false;
 
     if (sendButton) {
-        sendButton.click();
-        console.log('Gemini Bridge: Sent prompt');
+        console.log('Gemini Bridge: Clicking Send Button', sendButton);
+        // Log attributes to be sure
+        const attrStr = Array.from(sendButton.attributes).map(a => `${a.name}="${a.value}"`).join(' ');
+        console.log('Gemini Bridge: Button debug:', `<button ${attrStr}>`);
+
+        if (sendButton.disabled) {
+             console.warn('Gemini Bridge: Button is DISABLED. Attempting to wake input again...');
+             inputDiv.focus();
+             document.execCommand('insertText', false, ' ');
+             await new Promise(r => setTimeout(r, 500));
+        }
+        
+        simulateClick(sendButton);
+        
+        // Validation: Verify input is cleared
+        await new Promise(r => setTimeout(r, 1000));
+        if (inputDiv.innerText.trim().length === 0) {
+            sent = true;
+            console.log('Gemini Bridge: Sent confirmed (Input cleared).');
+        } else {
+             console.warn('Gemini Bridge: not sent, trying double-tap and hard click...');
+             simulateClick(sendButton);
+        }
     } else {
-        console.error('Gemini Bridge: Send button not found');
-        socket.emit('gemini-response', { text: "Error: Send button not found." });
-        return;
+         console.warn('Gemini Bridge: Send button NOT FOUND');
     }
 
-    // 4. Wait for response to START (element count increases)
-    console.log('Gemini Bridge: Waiting for response to start...');
-    let newResponseEl = null;
-    let attempts = 0;
-    while (attempts < 60) { // Wait up to 30s for the bubble to appear
-        await new Promise(r => setTimeout(r, 500));
-        const currentEls = getResponseElements();
-        if (currentEls.length > initialCount) {
-             newResponseEl = currentEls[currentEls.length - 1]; // The last one is the new one
-             console.log('Gemini Bridge: New response element detected!');
-             break;
-        }
-        attempts++;
+    if (!sent && inputDiv.innerText.trim().length > 0) {
+        console.warn('Gemini Bridge: Fallback to ENTER key...');
+        const mkEvent = (type) => new KeyboardEvent(type, {
+            bubbles: true, cancelable: true, keyCode: 13, key: 'Enter', code: 'Enter', which: 13
+        });
+        inputDiv.dispatchEvent(mkEvent('keydown'));
+        inputDiv.dispatchEvent(mkEvent('keypress'));
+        inputDiv.dispatchEvent(mkEvent('keyup'));
     }
 
-    if (!newResponseEl) {
-        console.error('Gemini Bridge: No new response element appeared.');
-        // Try to grab the last one anyway, maybe we missed the count?
-        const currentEls = getResponseElements();
-        if (currentEls.length > 0) {
-            newResponseEl = currentEls[currentEls.length - 1];
-            console.log('Gemini Bridge: Fallback to last existing element.');
-        } else {
-             socket.emit('gemini-response', { text: "Error: No response detected." });
-             return;
-        }
-    }
-
-    // 5. Wait for text stability (Response completion)
-    console.log('Gemini Bridge: Waiting for text generation to finish...');
-    let lastText = "";
-    let stableCount = 0;
-    const maxWaitTime = 300; // 5 minutes max
+    // 4. WAIT FOR GENERATION TO START (Max 120s)
+    console.log('Gemini Bridge: Waiting for generation to start (max 120s)...');
     
-    for (let i = 0; i < maxWaitTime; i++) {
-        await new Promise(r => setTimeout(r, 1000)); // Check every second
-        
-        let currentText = newResponseEl.innerText;
-        
-        // Sometimes innerText is empty while loading, ignore empty if we are early
-        if (!currentText && i < 5) continue; 
+    let generationDetected = false;
+    let responseEl = null;
+    
+    const getStopButton = () => document.querySelector('button[aria-label*="Stop"]') || 
+                               document.querySelector('button[aria-label*="Interrompi"]');
 
-        if (currentText.length > 0 && currentText === lastText) {
-            stableCount++;
-        } else {
-            stableCount = 0;
-            console.log(`Gemini Bridge: Text changing... (${currentText.length} chars)`);
+    for (let i = 0; i < 240; i++) { // 240 * 500ms = 120s
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Signal A: Stop Button Visible
+        if (getStopButton()) {
+            console.log('Gemini Bridge: Signal (Stop Button)');
+            generationDetected = true;
+            break;
         }
         
-        lastText = currentText;
-
-        // If text hasn't changed for 4 seconds, assume it's done
-        if (stableCount >= 4) {
-            console.log('Gemini Bridge: Response stable. Capture complete.');
+        // Signal B: New Unique Message
+        const currentMsgs = getModelMessages();
+        if (currentMsgs.length > 0) {
+             const candidateMsg = currentMsgs[currentMsgs.length - 1];
+             const candidateText = candidateMsg.innerText;
+             
+             if (candidateText.length > 20 && !initialTextContent.includes(candidateText.substring(0, 50))) {
+                 console.log('Gemini Bridge: Signal (New Unique Message)');
+                 generationDetected = true;
+                 responseEl = candidateMsg;
+                 break;
+             }
+        }
+        
+        // Signal C: Significant Text Increase (Must be MORE than the prompt)
+        const currentText = conversationArea.innerText;
+        // Logic: Current text must be Initial + Prompt + New Stuff. 
+        // We use a safe margin.
+        if (currentText.length > initialTextContent.length + text.length + 50) {
+            console.log('Gemini Bridge: Signal (Text Increased significantly)');
+            generationDetected = true;
             break;
         }
     }
+    
+    if (!generationDetected) {
+        socket.emit('gemini-response', { text: "Error: Timed out. AI did not start responding within 120s." });
+        return;
+    }
 
-    // Final capture
-    console.log('Gemini Bridge: Sending response back (' + lastText.length + ' chars)');
-    socket.emit('gemini-response', { text: lastText });
+    // 5. MONITOR PROGRESS until finished
+    console.log('Gemini Bridge: Monitoring generation...');
+    
+    let stableCount = 0;
+    let lastTextLen = 0;
+    
+    for (let i = 0; i < 600; i++) { // Max 5 mins
+        await new Promise(r => setTimeout(r, 1000));
+        
+        if (getStopButton()) {
+            stableCount = 0;
+            continue;
+        }
+        
+        const currentText = conversationArea.innerText;
+        
+        // Only count as stable if text has actually increased from start
+        if (currentText.length > initialTextContent.length + 20) {
+             if (currentText.length === lastTextLen) {
+                stableCount++;
+                console.log(`Gemini Bridge: Stable ${stableCount}/10`);
+             } else {
+                stableCount = 0;
+                lastTextLen = currentText.length;
+             }
+        } else {
+            stableCount = 0;
+        }
+        
+        if (stableCount >= 10) break;
+    }
+
+    // 6. CAPTURE FINAL RESPONSE
+    const finalMsgs = getModelMessages();
+    // Try to find the element again
+    if (finalMsgs.length > 0 && (!responseEl || !document.contains(responseEl))) {
+         // Find the last fresh one
+         for (let i = finalMsgs.length - 1; i >= 0; i--) {
+             const m = finalMsgs[i];
+             if (!initialTextContent.includes(m.innerText.substring(0, 50))) {
+                 responseEl = m;
+                 break;
+             }
+         }
+    }
+    
+    let responseText = "";
+    
+    // STRATEGY 1: Extract Code Block (Best for JSON)
+    if (responseEl) {
+        const codeBlocks = responseEl.querySelectorAll('pre, code, .code-block');
+        if (codeBlocks.length > 0) {
+            // Join all code blocks (sometimes it splits)
+            responseText = Array.from(codeBlocks).map(cb => cb.innerText).join('\n');
+            console.log('Gemini Bridge: Extracted from Code Block');
+        } else {
+            responseText = responseEl.innerText;
+            console.log('Gemini Bridge: Captured via Element Text');
+        }
+    }
+    
+    // STRATEGY 2: Text Diff Fallback
+    if (!responseText || initialTextContent.includes(responseText.substring(0, 50))) {
+        console.warn('Gemini Bridge: Using Text Diff Fallback');
+        const allText = conversationArea.innerText;
+        const promptSnippet = text.length > 50 ? text.substring(0, 50) : text;
+        const promptIdx = allText.lastIndexOf(promptSnippet);
+        
+        if (promptIdx > -1) {
+             responseText = allText.substring(promptIdx + text.length).trim();
+        } else {
+             // Fallback: Slice difference
+             const diffLen = allText.length - initialTextContent.length;
+             if (diffLen > 0) {
+                 responseText = allText.slice(-diffLen); 
+             } else {
+                 responseText = allText.slice(-2000); 
+             }
+        }
+    }
+
+    // CLEANUP & JSON EXTRACTION
+    // If we suspect it's JSON, try to extract just the JSON part
+    if (responseText.includes('[') || responseText.includes('{')) {
+        const jsonMatch = responseText.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+        if (jsonMatch) {
+            console.log('Gemini Bridge: JSON Pattern Detected, extracting...');
+            responseText = jsonMatch[0];
+        }
+    }
+
+    // Remove UI noise just in case
+    const uiPatterns = [
+        /Gemini può fare errori.*$/s,
+        /La tua privacy e Gemini.*$/s,
+        /Strumenti\s*Pro.*$/gs,
+        /^Q\s*$/gm,
+        /Hai interrotto la risposta/g,
+        /Chiedi a Gemini.*$/gm,
+        /\nStrumenti\nVeloce/g,
+        /Gem personalizzato\nJSON/g
+    ];
+    for (const pattern of uiPatterns) {
+        responseText = responseText.replace(pattern, '').trim();
+    }
+    
+    console.log('Gemini Bridge: Sending response (' + responseText.length + ' chars)');
+    
+    if (responseText.length < 10) {
+        socket.emit('gemini-response', { text: "Error: Captured response was empty/too short." });
+        return;
+    }
+
+    socket.emit('gemini-response', { text: responseText });
 }
